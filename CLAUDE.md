@@ -55,6 +55,27 @@ The README.md document provides a structured 12-week learning progression for Po
 3. **Weeks 5-8**: MVCC internals, vacuum, and connection pooling
 4. **Weeks 9-12**: Partitioning, zero-downtime migrations, and monitoring
 
+## Schema Design Course (`courses/`)
+
+A separate 6-week interview-prep course on SQL schema design, built on the **Pagila** sample database (DVD rental schema). See [courses/README.md](courses/README.md) for the practice loop and prerequisites.
+
+Each week has three files following the pattern `week-N-<topic>-{lesson,exercises,solutions}.md`:
+
+| Week | Topic | File prefix |
+|------|-------|-------------|
+| 1 | Normalisation vs Denormalisation | `week-1-normalisation-` |
+| 2 | Keys & IDs (SERIAL vs UUID vs ULID) | `week-2-keys-and-ids-` |
+| 3 | Relationships & Foreign Keys | `week-3-relationships-and-fks-` |
+| 4 | Indexes | `week-4-indexes-` |
+| 5 | Zero-Downtime Migrations | `week-5-zero-downtime-migrations-` |
+| 6 | JSONB & NoSQL-in-SQL | `week-6-jsonb-` |
+
+- **`-lesson.md`** — concept, tradeoffs, what interviewers look for
+- **`-exercises.md`** — hands-on SQL tasks against Pagila with `EXPLAIN ANALYZE` drills
+- **`-solutions.md`** — answers, expected plans, and interview talking points
+
+**Prerequisite:** the course expects Pagila to be loaded (`pagila-schema.sql` + `pagila-data.sql`), which is separate from the `clubdata` database used elsewhere in this repo.
+
 ## Recommended Sample Databases
 
 ### Clubdata (PGExercises database)
