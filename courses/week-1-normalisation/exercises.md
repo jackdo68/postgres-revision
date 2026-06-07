@@ -2,10 +2,10 @@
 
 ## Setup
 
-Make sure Pagila is loaded and you're connected:
+Make sure Pagila is loaded and you're connected (this repo loads Pagila into the `devdb` database):
 
-```sql
-pgcli -h localhost -U devuser -d pagila
+```bash
+pgcli -h localhost -U devuser -d devdb
 ```
 
 ---

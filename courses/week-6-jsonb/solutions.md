@@ -1,10 +1,21 @@
 # Week 6 Solutions
 
+## Exercise 1: Setup
+
+Adds a nullable `metadata JSONB DEFAULT '{}'` and populates every film. `ADD COLUMN ... DEFAULT '{}'` is instant on Postgres 11+ (Week 5 callback) — a constant default is stored in the catalog, so no row rewrite happens.
+
+---
+
 ## Exercise 2: JSONB Operators
 
-- `@>` containment and `?` key existence → Seq Scan without GIN index, index-accelerated with GIN
-- `->>` text extraction followed by a cast → always Seq Scan with GIN (GIN doesn't understand text comparisons)
-- `->` for access is not a filter, just projection — no index involved
+**The key subtlety:** a plain GIN index on `metadata` only accelerates predicates written against `metadata` *itself* — top-level containment (`metadata @> '{...}'`) and top-level key existence (`metadata ? 'source'`). The moment you **extract a sub-path first** (`metadata -> 'tags' @> ...`, `metadata -> 'available_regions' ? 'AU'`), the index no longer applies and you get a Seq Scan.
+
+Mapping the exercise queries:
+- Query 3 `metadata @> '{"source":"netflix"}'` → top-level containment → **GIN-accelerated** ✅
+- Query 4 `metadata -> 'available_regions' ? 'AU'` → `?` on an extracted sub-array → **Seq Scan even with GIN**. To use the index, rewrite as `metadata @> '{"available_regions":["AU"]}'`.
+- Query 5 `metadata -> 'tags' @> '"classic"'` → `@>` on an extracted sub-array → **Seq Scan even with GIN**. Rewrite as `metadata @> '{"tags":["classic"]}'` to hit the index.
+- `->>` text extraction + cast (see Exercise 3) → **always Seq Scan** with a plain GIN; GIN doesn't compare extracted values. Needs an expression index.
+- `->` alone is projection, not a filter — no index involved.
 
 ---
 
@@ -32,9 +43,11 @@ This creates a B-tree on the computed numeric value, which supports `>`, `<`, `B
 | Query | JSONB | Relational |
 |-------|-------|-----------|
 | Score range (> 9.0) | Needs expression index | B-tree on (source, score) — fast out of the box |
-| Multi-condition (region + tag) | Single GIN index covers both | Requires 2 JOINs, but each uses a PK index |
+| Multi-condition (region + tag) | GIN helps *only* if rewritten as top-level containment (see note); the sub-path form in the exercise Seq Scans | Requires 2 JOINs, but each uses a PK index |
 | Add a new score source | Just insert a new key — no schema change | Needs an INSERT into film_scores — also no schema change |
 | Type safety | None — you can store `"imdb": "banana"` | NUMERIC column rejects non-numbers |
+
+> **Note on the JSONB multi-condition query:** as written, `metadata -> 'available_regions' ? 'AU' AND metadata -> 'tags' @> '"classic"'` extracts sub-paths, so the GIN index can't be used and Postgres Seq Scans. Rewrite it as a single top-level containment to engage the index: `metadata @> '{"available_regions":["AU"],"tags":["classic"]}'` — one GIN index then covers both conditions.
 
 **The verdict:**
 - Relational is better when the schema is stable and you need integrity + fast analytical queries

@@ -103,11 +103,11 @@ CREATE INDEX idx_rental_date_cust ON rental (rental_date, customer_id);
 
 -- Query 1: filter by customer, then date
 EXPLAIN ANALYZE
-SELECT * FROM rental WHERE customer_id = 5 AND rental_date > '2005-06-01';
+SELECT * FROM rental WHERE customer_id = 5 AND rental_date > '2022-06-01';
 
 -- Query 2: filter by date only
 EXPLAIN ANALYZE
-SELECT * FROM rental WHERE rental_date > '2005-06-01';
+SELECT * FROM rental WHERE rental_date > '2022-06-01';
 
 -- Query 3: filter by customer only
 EXPLAIN ANALYZE

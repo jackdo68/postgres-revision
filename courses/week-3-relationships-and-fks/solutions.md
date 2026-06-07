@@ -2,9 +2,9 @@
 
 ## Exercise 1: FK Map
 
-Pagila has ~20+ foreign keys. The most referenced table is typically `customer` or `film` — many tables depend on them.
+Pagila has ~36 foreign-key constraints (the partitioned `payment` table contributes 3 per partition). The most referenced tables are `film`, `customer`, and `address` — many tables depend on them.
 
-All Pagila FKs use **RESTRICT** (the default) — no CASCADE anywhere. This is the safe choice for a rental system where you don't want accidental data loss.
+**No Pagila FK uses CASCADE.** The base-table FKs explicitly declare `ON DELETE RESTRICT`; the partitioned `payment` FKs declare no action, so they fall back to SQL's true default, `NO ACTION`. RESTRICT and NO ACTION both *block* a delete that would orphan children — they differ only in timing (NO ACTION can be deferred to the end of the transaction). Either way, deleting a referenced parent errors out. This is the safe choice for a rental system where you don't want accidental data loss.
 
 **Dependency chain for deleting a customer:**
 ```
@@ -85,7 +85,7 @@ WHERE c.customer_id IS NULL;
 SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'film_actor';
 ```
 
-Pagila has indexes on `film_actor(actor_id)` and `film_actor(film_id)`. A composite index `(film_id, actor_id)` could be a covering index for the join, but in practice the individual indexes are sufficient here — Postgres uses them in the hash join.
+`film_actor` has a composite primary key on `(actor_id, film_id)` (which also serves as an index led by `actor_id`) plus a separate `idx_fk_film_id` on `(film_id)`. So both join directions are already covered: lookups by `actor_id` use the PK, lookups by `film_id` (as in this exercise) use `idx_fk_film_id`. That's why the join is fast without adding anything — the FK column is already indexed.
 
 ---
 

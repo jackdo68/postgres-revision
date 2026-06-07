@@ -30,13 +30,17 @@ CREATE INDEX idx_test ON film(rental_rate);
 -- Test D: Create index concurrently
 CREATE INDEX CONCURRENTLY idx_test_conc ON film(rental_rate);
 
--- Test E: Change column type
-ALTER TABLE film ALTER COLUMN description TYPE TEXT;
+-- Test E: Change column type (a REAL type change → forces a full row rewrite)
+-- (We use rental_duration, not description: description is used by views,
+--  and altering a no-op same-type wouldn't rewrite anything.)
+ALTER TABLE film ALTER COLUMN rental_duration TYPE INT;
 ```
+
+> **Important — how to read this experiment.** Because Session 1 is holding an open transaction on `film`, *every* statement in Session 2 must first wait for that lock (DDL needs `ACCESS EXCLUSIVE`). So "did it block?" alone won't separate safe from dangerous. Instead: ROLLBACK Session 1 first, then run each op on its own and watch **how long it runs once it starts** — catalog-only changes (A, B) finish instantly; the row rewrite (E) takes time proportional to table size; and `CREATE INDEX CONCURRENTLY` (D) only shows its non-blocking benefit when no competing transaction is holding the table.
 
 **For each test:**
 1. Did Session 2 block (hang waiting for Session 1)?
-2. If yes, for how long?
+2. Once it acquired the lock, how long did the operation itself take?
 3. After testing each, ROLLBACK Session 1 and clean up
 
 **Cleanup between tests:**
@@ -48,6 +52,8 @@ ALTER TABLE film DROP COLUMN IF EXISTS test_col_a;
 ALTER TABLE film DROP COLUMN IF EXISTS test_col_b;
 DROP INDEX IF EXISTS idx_test;
 DROP INDEX IF EXISTS idx_test_conc;
+-- Revert the Test E type change
+ALTER TABLE film ALTER COLUMN rental_duration TYPE SMALLINT;
 ```
 
 ---

@@ -6,7 +6,7 @@ A 6-week practice course using the **Pagila** database (DVD rental schema). Ever
 
 ```bash
 # Start Pagila locally
-docker compose up -d
+docker-compose up -d
 psql -h localhost -U devuser -d devdb -f pagila-schema.sql
 psql -h localhost -U devuser -d devdb -f pagila-data.sql
 ```

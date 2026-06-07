@@ -5,11 +5,11 @@
 **Findings:** All Pagila PKs use `integer` (SERIAL). This is typical for older schemas and works fine for a single-database app.
 
 **Security implications:**
-- `SELECT max(customer_id) FROM customer;` → ~599. An attacker now knows roughly how many customers you have.
-- `SELECT max(payment_id) FROM payment;` → ~16,049. Same problem.
-- Sequential IDs also allow enumeration: try `/api/customers/1`, `/api/customers/2`, etc.
+- `SELECT max(customer_id) FROM customer;` → ~599, and `SELECT count(*) FROM customer;` → 599. Here max id ≈ row count, so an attacker learns roughly how many customers you have.
+- `SELECT max(payment_id) FROM payment;` → **~32,098**, but `SELECT count(*) FROM payment;` → only **~16,049 rows**. They *don't* match — Pagila's payment sequence starts at 16,050, not 1.
+- **The nuance:** a sequential id leaks an *upper bound and a growth rate over time*, not necessarily an exact count — the starting offset and gaps (deletes, rollbacks) mean max id ≥ row count. Still enough for a competitor to estimate scale, and it allows enumeration: `/api/payments/16050`, `16051`, …
 
-**Interview talking point:** "Sequential IDs are fine internally but shouldn't be exposed in public APIs without authorization checks. The real fix isn't obscuring IDs — it's proper access control. But UUIDs add defense in depth."
+**Interview talking point:** "Sequential IDs are fine internally but shouldn't be exposed in public APIs without authorization checks. The real fix isn't obscuring IDs — it's proper access control. But UUIDs add defense in depth. And note an id isn't a row count: a max `payment_id` of 32k with 16k rows just tells you the sequence's range, not the exact volume."
 
 ---
 
