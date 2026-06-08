@@ -58,6 +58,23 @@ JOIN country ON city.country_id = country.country_id;
 
 Normalising means you split data apart; joining is how you put it back together when you query.
 
+### View vs materialised view
+
+Both let you give a name to a query (often a big join) and then `SELECT` from it like a table — but they store data very differently:
+
+- **View** — a *saved query*. Stores **no data**; every time you read it, Postgres re-runs the underlying query against the live tables. Always up to date, but pays the query cost on every read. Pagila's `film_list` and `customer_list` are views.
+- **Materialised view** — runs the query **once and stores the result on disk** (a snapshot). Reads are fast (no query underneath), but the data is frozen until you run `REFRESH MATERIALIZED VIEW`.
+
+| | View | Materialised view |
+|---|---|---|
+| Stores data? | No — just the saved query | Yes — a stored snapshot |
+| Query runs at read time? | Yes, every read | No — reads the snapshot |
+| Read speed | Same as the query (e.g. the join) | Fast |
+| Always fresh? | Yes — live | No — stale until `REFRESH` |
+| Refresh needed? | Never | Yes, manually or on a schedule |
+
+Rule of thumb: a **view** is for convenience (a reusable query shape) and always-correct data; a **materialised view** is for speed when you can tolerate slightly stale data. This distinction matters for denormalisation below — a plain view does *not* avoid the join cost, but a materialised view does.
+
 ### Redundancy
 
 The same fact stored in more than one place. Redundancy is the problem normalisation removes — if "Canada" were typed onto 50 different city rows and the spelling needed fixing, you'd have 50 rows to update instead of 1.
@@ -72,8 +89,72 @@ The same fact stored in more than one place. Redundancy is the problem normalisa
 
 You don't need to memorise the formal proofs. The instinct that matters: *"is any fact here repeated, or does any column describe something other than this row's id? If so, it probably belongs in its own table."*
 
-> **OLTP vs OLAP (where each style fits).**
-> **OLTP** (*Online Transaction Processing*) is the live database behind an app — lots of small, fast reads/writes: rent a film (insert one `rental` row), take a payment (insert one `payment` row). These schemas are **normalised** for correctness. **OLAP** (*Online Analytical Processing*) is reporting/analytics — a few big queries scanning millions of rows ("revenue per category per month"). These are often **denormalised** for read speed. Pagila is an OLTP-style schema.
+#### Each rule with a Pagila example
+
+The pattern is the same every time: spot the bad table, see why it breaks, fix it by splitting.
+
+**1NF — each cell holds one value.** Violation: cram multiple actors into one column.
+
+```
+film_bad
+film_id | title            | actors
+--------+------------------+-------------------------------------------
+1       | ACADEMY DINOSAUR | "PENELOPE GUINESS, CHRISTIAN GABLE, ..."
+```
+
+The `actors` cell holds a *list*, not a single value — you can't easily query "all films with a given actor," index it, or join on it. **Fix:** one fact per row, which is exactly Pagila's `film_actor`:
+
+```
+film_actor
+film_id | actor_id
+--------+---------
+1       | 1
+1       | 10
+```
+
+**2NF — depends on the WHOLE key** (only relevant when the key is composite). `film_actor`'s primary key is two columns together: `(film_id, actor_id)`. Violation: add `actor_last_name`, which depends on `actor_id` *alone* (half the key):
+
+```
+film_actor_bad
+film_id | actor_id | actor_last_name   ← depends only on actor_id, not film_id
+--------+----------+----------------
+1       | 1        | GUINESS
+23      | 1        | GUINESS           ← repeated for every film the actor is in
+```
+
+**Fix:** put the name where its real key lives — the `actor` table (keyed by `actor_id` only). `film_actor` keeps just the two ids.
+
+**3NF — depends on NOTHING BUT the key** (no column describing another non-key column). Violation: put `city_name` and `country_name` directly on `address`:
+
+```
+address_bad
+address_id | address           | city_id | city_name  | country_name
+-----------+-------------------+---------+------------+-------------
+1          | 47 MySakila Drive | 300     | Lethbridge | Canada
+2          | 28 MySQL Blvd     | 300     | Lethbridge | Canada      ← repeated
+```
+
+`city_name` doesn't describe the *address* — it describes `city_id`. The chain is `address_id → city_id → city_name` (transitive), so "Lethbridge"/"Canada" get retyped on every address in that city. **Fix:** keep only the foreign key on `address`; the name lives in `city`, the country in `country` — exactly Pagila's real `address → city → country` chain.
+
+**The shortcut:** if a value is *repeated across rows*, it's usually a normal-form smell. 1NF = don't stuff lists in a cell; 2NF = don't depend on half a composite key; 3NF = don't store a fact that really belongs to something you're already pointing at.
+
+#### OLTP vs OLAP (where each style fits)
+
+Two kinds of database workload, and they pull schema design in opposite directions:
+
+- **OLTP** (*Online Transaction Processing*) — the live database behind an app. Normalised for correctness.
+- **OLAP** (*Online Analytical Processing*) — reporting/analytics. Often denormalised for read speed.
+
+| | OLTP | OLAP |
+|---|---|---|
+| Full name | Online Transaction Processing | Online Analytical Processing |
+| What it is | The live database behind an app | Reporting / analytics |
+| Workload | Many small, fast reads/writes | A few big queries scanning millions of rows |
+| Example | Rent a film (insert one `rental` row) | "Revenue per category per month" |
+| Schema style | **Normalised** (3NF) | Often **denormalised** |
+| Optimised for | Correctness & per-transaction speed | Scanning/aggregating large volumes |
+
+Pagila is an OLTP-style schema.
 
 ---
 
@@ -115,7 +196,7 @@ film_actor(film_id FK, actor_id FK)        -- 5462 links, names stored NOWHERE h
 
 ### What denormalisation looks like
 
-Denormalisation flattens that split data back into one wide result, trading duplication for fewer joins. Pagila ships a built-in example — the `film_list` **view**, which glues `film → film_category → category` and `film → film_actor → actor` together and mashes all the actor names into one text field:
+Real denormalisation means **physically storing the flattened/duplicated data** so the join doesn't have to run at read time. The *shape* you're aiming for looks like Pagila's built-in `film_list` **view**, which glues `film → film_category → category` and `film → film_actor → actor` together and mashes all the actor names into one text field:
 
 ```sql
 SELECT * FROM film_list LIMIT 5;
@@ -123,16 +204,49 @@ SELECT * FROM film_list LIMIT 5;
 -- ... | ...   | Horror   | 4.99  | ...    | PG     | "PENELOPE GUINESS, CHRISTIAN GABLE, ..."
 ```
 
-Reading that is easy — one row, no joins. But imagine *storing* the `actors` text permanently on each film row. That's denormalisation, and here's the trade:
+That reads like one flat table — but **a plain view is not actually denormalised.** A view is just a *saved query*: every time you read it, Postgres re-runs the full join underneath. So `film_list` gives you the denormalised *shape* (convenience) but **not** the denormalised *storage* — you still pay the join cost on every read.
 
-| | Normalised (`film_actor`) | Denormalised (actor names on `film`) |
+To get the read-speed win, you must store the flattened result for real. Two ways:
+
+- **Denormalised table** — store the `actors` text (or array) directly on the film row. No join at read; but *you* own the duplication and must keep it in sync on every write.
+- **Materialised view** — like a view, but Postgres stores the query result on disk as a snapshot. Reads skip the join; the cost is staleness until you run `REFRESH MATERIALIZED VIEW`.
+
+| | Plain view (`film_list`) | Denormalised table | Materialised view |
+|---|---|---|---|
+| Stores flattened data? | No — saved query | Yes | Yes (snapshot) |
+| Join runs at read time? | **Yes, every time** | No | No |
+| Faster reads? | No (same as the join) | Yes | Yes |
+| Real denormalisation? | **No** | Yes | Yes |
+| Data freshness | Always live | Live *if* you sync writes | Stale until `REFRESH` |
+
+So: **view = denormalised *interface*; denormalised table / materialised view = denormalised *storage*.** Only the latter two trade duplication for read speed. And that trade is the core decision:
+
+| | Normalised (`film_actor`) | Denormalised storage (names on `film`) |
 |---|---|---|
 | Reads | Need a join | Already flat, fast |
 | Writes | Update a name in one place | Update it on every film they're in |
 | Consistency | Guaranteed by the FK | Can drift (renamed in `actor`, stale on `film`) |
 | Storage | Smaller | Larger (repeated text) |
 
-> A **view** like `film_list` gives you the *read convenience* of denormalisation while the *underlying tables stay normalised* — the join just runs each time you query. Storing the flattened result is what creates the duplication risk.
+### Why a join can become a bottleneck
+
+A join isn't free — Postgres has to **match rows together at query time**, spending **CPU** (comparing values), **memory** (building a hash table or sorting), and **I/O** (reading rows from each table). The catch is that this cost is paid on **every single read**:
+
+- One query joining 4 tables in ~2ms feels free.
+- The same query on a search page running 500×/second pays that join cost 500×/second — now CPU and memory add up and the database becomes the bottleneck.
+
+Denormalising pre-computes the join once, so each read is a plain single-table lookup with no matching work. That's the trade:
+
+| Per read | Normalised (join at read) | Denormalised (pre-joined) |
+|---|---|---|
+| Read speed | Slower — match rows every query | Faster — one table, no matching |
+| CPU | Higher (compare / hash / sort) | Lower |
+| Memory | Hash tables / sort buffers | Minimal |
+| Storage | Smaller — each fact stored once | Larger — data repeated |
+| Write speed | Fast — update one row | Slower — update every copy |
+| Consistency | Guaranteed (single source) | Can drift / go stale |
+
+**But measure first.** A join is only a bottleneck once you've proven it. Two things usually fix a "slow join" *without* denormalising: (1) an **index on the join column** turns a slow scan into a fast lookup — Pagila already indexes `film_actor.film_id`; (2) Postgres **caches hot pages** in memory, so repeated joins often hit RAM, not disk. Reach for denormalisation only after `EXPLAIN ANALYZE` shows the join itself dominating the plan.
 
 ### When to normalise (the default)
 

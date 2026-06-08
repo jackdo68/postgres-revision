@@ -59,22 +59,43 @@ The README.md document provides a structured 12-week learning progression for Po
 
 A separate 6-week interview-prep course on SQL schema design, built on the **Pagila** sample database (DVD rental schema). See [courses/README.md](courses/README.md) for the practice loop and prerequisites.
 
-Each week has three files following the pattern `week-N-<topic>-{lesson,exercises,solutions}.md`:
+Each week lives in its own folder `week-N-<topic>/` containing three files: `lesson.md`, `exercises.md`, `solutions.md`:
 
-| Week | Topic | File prefix |
-|------|-------|-------------|
-| 1 | Normalisation vs Denormalisation | `week-1-normalisation-` |
-| 2 | Keys & IDs (SERIAL vs UUID vs ULID) | `week-2-keys-and-ids-` |
-| 3 | Relationships & Foreign Keys | `week-3-relationships-and-fks-` |
-| 4 | Indexes | `week-4-indexes-` |
-| 5 | Zero-Downtime Migrations | `week-5-zero-downtime-migrations-` |
-| 6 | JSONB & NoSQL-in-SQL | `week-6-jsonb-` |
+| Week | Topic | Folder |
+|------|-------|--------|
+| 1 | Normalisation vs Denormalisation | `week-1-normalisation/` |
+| 2 | Keys & IDs (SERIAL vs UUID vs ULID) | `week-2-keys-and-ids/` |
+| 3 | Relationships & Foreign Keys | `week-3-relationships-and-fks/` |
+| 4 | Indexes | `week-4-indexes/` |
+| 5 | Zero-Downtime Migrations | `week-5-zero-downtime-migrations/` |
+| 6 | JSONB & NoSQL-in-SQL | `week-6-jsonb/` |
 
-- **`-lesson.md`** — concept, tradeoffs, what interviewers look for
-- **`-exercises.md`** — hands-on SQL tasks against Pagila with `EXPLAIN ANALYZE` drills
-- **`-solutions.md`** — answers, expected plans, and interview talking points
+- **`lesson.md`** — concept, tradeoffs, what interviewers look for
+- **`exercises.md`** — hands-on SQL tasks against Pagila with `EXPLAIN ANALYZE` drills
+- **`solutions.md`** — answers, expected plans, and interview talking points
 
-**Prerequisite:** the course expects Pagila to be loaded (`pagila-schema.sql` + `pagila-data.sql`), which is separate from the `clubdata` database used elsewhere in this repo.
+**Prerequisite:** the course expects Pagila to be loaded into the `devdb` database (`pagila-schema.sql` + `pagila-data.sql`), which is separate from the `clubdata` database used elsewhere in this repo.
+
+### Lesson structure convention
+
+Each `lesson.md` follows this order: **Introduction** (what we're learning + one-sentence takeaway) → **Key Concepts** (vocabulary defined simply) → **Deep Dive** (the actual topic) → **Interview Tips**. Writing should be concise and understandable by someone with minimal PostgreSQL knowledge.
+
+### Worked-example format (reference)
+
+When adding teaching examples, follow the format used in the **3NF section of `week-1-normalisation/lesson.md`** ("Each rule with a Pagila example"). It is the canonical style for this project. The pattern:
+
+1. **State the rule in plain language**, then show a concrete example.
+2. **Show the *bad* table first** as a small ASCII table, using **real Pagila tables and real data values** (e.g. `address_id 1 = "47 MySakila Drive"`, `city_id 300 = Lethbridge`, `country = Canada`). Name bad tables with a `_bad` suffix.
+3. **Annotate the problem inline** with `←` arrows pointing at the offending column/row (e.g. `← repeated for every film the actor is in`).
+4. **Explain *why* it breaks** in one or two sentences.
+5. **Show the fix**, ideally mapping to how real Pagila already models it.
+6. **End with a one-line "shortcut"/instinct** the reader can remember.
+
+**Comparison rule:** whenever explaining a comparison (X vs Y), present it as **both** a short set of dot points (the headline difference per option) **and** a table (attribute rows, one column per option). See the "OLTP vs OLAP" comparison in `week-1-normalisation/lesson.md` for the canonical format. Do not bury a comparison in a prose paragraph.
+
+**Accuracy rule:** always verify example values (IDs, counts, column types, FK actions) against `pagila-data.sql` / `pagila-schema.sql` before writing them — do not guess. Pagila here is the 2022 edition (dates are 2022, `payment` is partitioned by month).
+
+**Markdown policy reminder:** only create or edit `.md` files when the user explicitly asks (per global instructions).
 
 ## Recommended Sample Databases
 
