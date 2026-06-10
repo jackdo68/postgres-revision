@@ -20,7 +20,12 @@ The column that uniquely identifies a row. PostgreSQL automatically builds a **B
 
 ### B-tree index (you must picture this)
 
-A B-tree is a sorted, balanced tree PostgreSQL uses to find rows quickly. The crucial fact for this week: **it stays cheap when new values arrive in increasing order** (they all land at the "right edge," touching the same few pages), and **gets expensive when new values are random** (every insert lands in a different spot). Hold that picture — it explains everything below.
+A B-tree is a sorted, balanced tree PostgreSQL uses to find rows quickly. Because it keeps values **in sorted order**, *where* a new value gets inserted depends on its size:
+
+- **Increasing values (1, 2, 3…)** — each new value is bigger than all the previous ones, so it always goes at the **end**. Postgres reuses the same spot (already in memory) → **cheap/fast**.
+- **Random values (like UUIDs)** — a new value could belong **anywhere** in the middle, so Postgres jumps to a different place each time and shuffles to keep things sorted → **expensive/slow**.
+
+("Pages" = the fixed-size blocks the index is stored in; "cheap/expensive" = how much work each insert costs.) Hold that picture — it explains everything below: **sequential keys are added at the end (fast); random keys are inserted all over (slow).**
 
 ### The three contenders
 
@@ -102,3 +107,28 @@ The choice isn't about uniqueness — all three are unique. It's about **index p
 - Mention the **security/enumeration** angle for anything user-facing.
 - Mention **distribution**: sequences don't coordinate across nodes, so multi-region writes push you toward UUID/ULID.
 - **Green flag:** the hybrid (`BIGSERIAL` PK + external UUID), and "I'd default to `BIGSERIAL` and only reach for UUID/ULID when I'm exposing ids publicly or writing from multiple nodes."
+
+---
+
+## Aside: inspecting the schema (`information_schema` vs `pg_catalog`)
+
+Exercise 1 inspects Pagila's primary keys by querying `information_schema`. That's a built-in schema describing **the database itself** — its tables, columns, constraints, and keys (metadata, not your actor/film data). Postgres actually has **two** ways to introspect, and the exercises use both:
+
+| | `information_schema` | `pg_catalog` |
+|---|---|---|
+| Origin | SQL standard (portable) | PostgreSQL-specific |
+| Style | Friendly, normalised views | Raw system tables (`pg_class`, `pg_index`, `pg_attribute`…) |
+| Detail | General | Deeper — index internals, sizes, planner stats |
+| Example | `information_schema.columns` | `pg_indexes`, `pg_stat_user_tables` |
+
+Rule of thumb: use **`information_schema`** for standard, portable questions ("what are the columns/keys?"); drop to **`pg_catalog`** when you need Postgres-only detail (index definitions, table sizes, valid/invalid indexes — like the `pg_indexes` and `pg_class` queries in Weeks 3–5).
+
+A quick way to see it yourself:
+
+```sql
+-- list every column and its type without opening each table
+SELECT table_name, column_name, data_type
+FROM information_schema.columns
+WHERE table_schema = 'public'
+ORDER BY table_name, ordinal_position;
+```
