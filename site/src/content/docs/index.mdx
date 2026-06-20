@@ -1,0 +1,51 @@
+---
+title: Postgres Revision
+description: A hands-on PostgreSQL course — lessons, exercises, and solutions built on the Pagila database.
+---
+
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
+A hands-on PostgreSQL course for building schema-design instincts for production systems and interviews. Each week has a **lesson** (concepts + tradeoffs), **exercises** (hands-on SQL against the Pagila database), and **solutions** (answers + interview talking points).
+
+## The six weeks
+
+<CardGrid>
+  <LinkCard
+    title="Week 1 · Normalisation vs Denormalisation"
+    href={`${import.meta.env.BASE_URL}week-1-normalisation/lesson/`}
+    description="Normalise vs denormalise, 1NF–3NF, views vs materialised views, when joins become a bottleneck."
+  />
+  <LinkCard
+    title="Week 2 · Keys & IDs"
+    href={`${import.meta.env.BASE_URL}week-2-keys-and-ids/lesson/`}
+    description="SERIAL vs UUID vs ULID, B-tree behaviour, and the index-locality tradeoff (plus a B-tree deep dive)."
+  />
+  <LinkCard
+    title="Week 3 · Relationships & Foreign Keys"
+    href={`${import.meta.env.BASE_URL}week-3-relationships-and-fks/lesson/`}
+    description="FKs, referential actions (RESTRICT/CASCADE/NO ACTION), junction tables, and the N+1 problem."
+  />
+  <LinkCard
+    title="Week 4 · Indexes"
+    href={`${import.meta.env.BASE_URL}week-4-indexes/lesson/`}
+    description="B-tree, partial, composite, GIN (tsvector), GiST (geospatial), BRIN, and reading EXPLAIN ANALYZE."
+  />
+  <LinkCard
+    title="Week 5 · Zero-Downtime Migrations"
+    href={`${import.meta.env.BASE_URL}week-5-zero-downtime-migrations/lesson/`}
+    description="Locks, the expand/contract pattern, batched backfills, and CREATE INDEX CONCURRENTLY."
+  />
+  <LinkCard
+    title="Week 6 · JSONB"
+    href={`${import.meta.env.BASE_URL}week-6-jsonb/lesson/`}
+    description="JSONB vs columns, operators and GIN indexing, and when JSONB is the right call vs a trap."
+  />
+</CardGrid>
+
+## Start here
+
+<CardGrid>
+  <LinkCard title="Course Guide" href={`${import.meta.env.BASE_URL}course-guide/`} description="The practice loop and prerequisites." />
+  <LinkCard title="Commands" href={`${import.meta.env.BASE_URL}commands/`} description="Handy psql / Docker / migration commands." />
+  <LinkCard title="Repo & DB Setup" href={`${import.meta.env.BASE_URL}setup/`} description="Spin up PostgreSQL and load Pagila." />
+</CardGrid>

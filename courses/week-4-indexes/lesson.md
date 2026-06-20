@@ -71,11 +71,89 @@ This one index supports:
 CREATE INDEX idx_film_fulltext ON film USING gin (fulltext);
 ```
 
-Pagila's `film.fulltext` is a `tsvector` (search document). GIN (Generalized **In**verted Index) is built for values that contain *many* elements — arrays, JSONB, full-text. It stores "value → rows" instead of "row → values."
+Pagila's `film.fulltext` is a `tsvector` (search document). GIN (Generalized **In**verted Index) is built for columns that hold **many values per row** — arrays, JSONB, full-text.
 
-**Use when:** full-text search (`@@`), JSONB containment (`@>`), key existence (`?`), array containment (`@>`). (This powers Week 6's JSONB queries.)
+**The mental model is the index at the back of a book.** A B-tree is *forward* (row → its value), which is perfect when each row has one value. But how do you index a film whose `fulltext` holds many words? GIN **inverts** it to *value → list of rows*:
 
-**Trade-off:** slower to build and update than B-tree, but dramatically faster for these containment searches.
+```
+forward (how the row stores it):     inverted index (what GIN stores):
+film 1 → {academy, dinosaur, epic}   academy  → [film 1, film 3]
+film 2 → {drama, dinosaur}           dinosaur → [film 1, film 2]
+film 3 → {academy, love}             drama    → [film 2]   ...
+```
+
+Now *"which films contain `dinosaur`?"* is a single lookup → `[film 1, film 2]` — just like flipping to a book's index instead of reading every page. GIN **explodes** each row's collection into one entry per element (a film with 8 words makes up to 8 entries, all pointing back to that film); a B-tree can't, because it treats the whole `tsvector`/array as one opaque value.
+
+**Use when:** the question is "does this row's collection *contain* X?" — full-text search (`@@`), JSONB containment (`@>`), key existence (`?`), array containment (`@>`). (This powers Week 6's JSONB queries.)
+
+**Trade-off:** slower writes (one row can add many entries to maintain — softened by the `fastupdate` pending list), and it only does "contains"-style lookups (no `ORDER BY` or `> ` ranges — that's B-tree). In return it's dramatically faster for containment searches.
+
+#### What `fulltext` actually holds — the `tsvector`
+
+`fulltext` isn't the raw text; it's a `tsvector` — the document reduced to a sorted list of **lexemes** (normalised word-roots), each with its **positions**. Here's the real value for film 1:
+
+```
+TITLE:    ACADEMY DINOSAUR
+DESC:     A Epic Drama of a Feminist And a Mad Scientist who must Battle a Teacher in The Canadian Rockies
+FULLTEXT: 'academi':1 'battl':15 'canadian':20 'dinosaur':2 'drama':5 'epic':4
+          'feminist':8 'mad':11 'must':14 'rocki':21 'scientist':12 'teacher':17
+```
+
+`to_tsvector('english', …)` does three things, all visible above:
+
+1. **Lowercase + tokenise** — `ACADEMY` becomes part of `academi`.
+2. **Drop stop-words** — noise like `a`, `of`, `and`, `the` is removed (that's why positions skip 3, 6, 7… — those were stop-words).
+3. **Stem to a root lexeme** so word forms match — `Rockies → rocki`, `Battle → battl`.
+
+You search it with a `tsquery` via the `@@` ("matches") operator. The query is normalised the **same** way, so forms don't need to match exactly:
+
+```sql
+-- 'rockies' stems to 'rocki', which is in film 1 → match
+SELECT title FROM film WHERE fulltext @@ to_tsquery('english', 'rockies');
+
+-- boolean ops: & and · | or · ! not · <-> followed-by (phrase)
+WHERE fulltext @@ to_tsquery('english', 'mad & scientist')
+WHERE fulltext @@ phraseto_tsquery('english', 'canadian rockies')  -- positions 20→21
+```
+
+Pagila **precomputes** this into `fulltext` and keeps it fresh with a trigger on `title` + `description`, so you index/search the stored column instead of re-parsing text each query. The positions also power relevance ranking via `ts_rank(fulltext, query)`. GIN then inverts these lexemes (`dinosaur → [film 1, film 2]`) to make `@@` an instant lookup.
+
+### GiST index — for geospatial, ranges, and "is X near/overlapping Y?"
+
+```sql
+-- needs the PostGIS extension for spatial types
+CREATE EXTENSION IF NOT EXISTS postgis;
+
+CREATE TABLE store_location (
+    store_id int PRIMARY KEY,
+    geom     geometry(Point, 4326)   -- a lon/lat point
+);
+
+CREATE INDEX idx_store_geom ON store_location USING gist (geom);
+```
+
+A B-tree only understands a single sorted line ("less than / greater than"), which works for numbers and text but **not** for 2-D data like map coordinates — there's no single way to sort points on a map. **GiST** (Generalized Search Tree) is the answer: instead of one sorted order, it groups values by *bounding boxes* in a tree, so it can answer "what's **near** here?" or "what **overlaps** this area?".
+
+This is the index behind **PostGIS**, PostgreSQL's geospatial extension — easily one of the most popular reasons teams choose Postgres. It adds spatial types (`geometry`/`geography` — points, lines, polygons) and functions, and GiST makes their queries fast:
+
+```sql
+-- stores within 5 km of a point — uses the GiST index
+SELECT store_id
+FROM store_location
+WHERE ST_DWithin(geom, ST_MakePoint(-73.99, 40.73)::geography, 5000);
+
+-- nearest 5 stores (KNN) — GiST also accelerates "ORDER BY distance"
+SELECT store_id
+FROM store_location
+ORDER BY geom <-> ST_MakePoint(-73.99, 40.73)::geometry
+LIMIT 5;
+```
+
+**Use when:** geospatial / location data (the big one), plus range-type overlap (`tsrange`, `int4range` with `&&`) and "does this contain/overlap that?" queries that a B-tree can't express.
+
+**Trade-off:** slower to build than B-tree and not for plain equality/sorting — but it's the *only* practical way to index 2-D spatial and overlap queries. (`geometry` = fast, flat-plane math; `geography` = slower but accurate on the curved earth, e.g. distances in metres.)
+
+> Spatial types need `CREATE EXTENSION postgis` first (not installed in this repo's `devdb` by default). The concept is what matters here: **GiST is the index type for "near / overlapping / contains," with PostGIS as its headline use case.**
 
 ### BRIN index — tiny index for naturally-ordered data
 

@@ -84,6 +84,36 @@ At very large scale, some teams drop FKs:
 
 **The trade:** you gain write speed/flexibility but lose the database-level guarantee. Orphans become possible, so you must enforce consistency in application code (or accept eventual consistency) and have a way to *detect* orphaned rows.
 
+### Junction tables and composite keys
+
+A **junction table** (like `film_actor`) models a **many-to-many** relationship: one film has many actors, one actor is in many films. Its job is to store the *pairs*.
+
+```
+film_actor
+actor_id | film_id
+---------+--------
+   1     |   1
+   1     |   23     ← actor 1 again (in another film)
+   2     |   1      ← film 1 again (with another actor)
+```
+
+**Why the primary key must be composite.** A PK has to be unique, but here `actor_id` alone repeats (an actor is in many films), and so does `film_id`. The only thing that's unique is the **pair** `(actor_id, film_id)` — "this actor in this film" appears once. So the PK *has to* be composite. That's a **correctness** requirement, not just an indexing choice: it forbids duplicate links and lets an actor belong to many films. (You can't shrink it to a single-column `actor_id` PK.)
+
+**How that composite index serves queries.** A PK on `(actor_id, film_id)` is a B-tree sorted by `actor_id` first, then `film_id`. By the leftmost-prefix rule (Week 4) it serves lookups that *start* with `actor_id`:
+
+- `WHERE actor_id = 1` ✅ — "all films for actor 1"
+- `WHERE actor_id = 1 AND film_id = 23` ✅
+- `WHERE film_id = 23` ❌ — `film_id` isn't the leftmost column, so this can't use the PK
+
+That last case is the reverse direction ("all actors for film 23"), so you need a **second index on the other FK**. Pagila adds exactly that — `idx_fk_film_id` on `(film_id)` — giving one access path per direction:
+
+| Lookup | Index used | Serves |
+|---|---|---|
+| films for an actor | composite **PK** `(actor_id, film_id)` | `WHERE actor_id = …` |
+| actors for a film | `idx_fk_film_id` `(film_id)` | `WHERE film_id = …` |
+
+So a junction table's minimal, correct setup is: **a composite PK on the pair, plus a single index on whichever FK is *not* the leftmost column** — covering both directions without a redundant third index.
+
 ### The N+1 problem — often a schema/index decision
 
 N+1 is when an ORM loads a parent, then fires one query per child (1 + N queries). People blame the ORM, but the root cause is frequently the schema:
