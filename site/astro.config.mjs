@@ -11,6 +11,16 @@ export default defineConfig({
       title: 'Postgres Revision',
       description:
         'A hands-on PostgreSQL course — lessons, exercises, and solutions built on the Pagila database.',
+      logo: { src: './src/assets/logo.svg', alt: 'Postgres Revision' },
+      favicon: '/favicon.svg',
+      head: [
+        // Social preview (Open Graph + Twitter). Absolute URLs required.
+        { tag: 'meta', attrs: { property: 'og:image', content: 'https://jackdo68.github.io/postgres-revision/og.png' } },
+        { tag: 'meta', attrs: { property: 'og:image:width', content: '1200' } },
+        { tag: 'meta', attrs: { property: 'og:image:height', content: '630' } },
+        { tag: 'meta', attrs: { name: 'twitter:card', content: 'summary_large_image' } },
+        { tag: 'meta', attrs: { name: 'twitter:image', content: 'https://jackdo68.github.io/postgres-revision/og.png' } },
+      ],
       sidebar: [
         {
           label: 'Start here',

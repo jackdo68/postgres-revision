@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Postgres Revision">
+  <!-- rounded hexagon with padding + border -->
+  <polygon points="32,7 53.65,19.5 53.65,44.5 32,57 10.35,44.5 10.35,19.5"
+           fill="#336791" stroke="#1c405c" stroke-width="2.5" stroke-linejoin="round"/>
+  <!-- database cylinder -->
+  <path d="M21 24 L21 43 A 11 3.4 0 0 0 43 43 L 43 24 Z" fill="#ffffff"/>
+  <ellipse cx="32" cy="24" rx="11" ry="3.4" fill="#ffffff" stroke="#336791" stroke-width="1.4"/>
+  <text x="32" y="38.5" text-anchor="middle" font-family="Helvetica, Arial, sans-serif"
+        font-size="10.5" font-weight="700" letter-spacing="-0.3" fill="#336791">SQL</text>
+</svg>
