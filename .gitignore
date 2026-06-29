@@ -10,4 +10,5 @@ site/.astro/
 site/src/content/docs/week-*/
 site/src/content/docs/course-guide.md
 site/src/content/docs/commands.md
+site/src/content/docs/data-types.md
 site/src/content/docs/setup.md

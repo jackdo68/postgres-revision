@@ -72,7 +72,7 @@ async function cleanGenerated() {
       await fs.rm(path.join(docsDir, e.name), { recursive: true, force: true });
     }
   }
-  for (const f of ['course-guide.md', 'commands.md', 'setup.md']) {
+  for (const f of ['course-guide.md', 'commands.md', 'data-types.md', 'setup.md']) {
     await fs.rm(path.join(docsDir, f), { force: true });
   }
 }
@@ -87,6 +87,9 @@ async function main() {
   });
   await writeDoc('commands.md', path.join(repoRoot, 'COMMANDS.md'), {
     titleFallback: 'Commands',
+  });
+  await writeDoc('data-types.md', path.join(repoRoot, 'DATA-TYPES.md'), {
+    titleFallback: 'Data Types',
   });
   await writeDoc('setup.md', path.join(repoRoot, 'README.md'), {
     titleFallback: 'Repo & DB Setup',
@@ -112,7 +115,7 @@ async function main() {
     }
   }
 
-  console.log(`Synced ${count} week pages + 3 guides into ${path.relative(repoRoot, docsDir)}`);
+  console.log(`Synced ${count} week pages + 4 guides into ${path.relative(repoRoot, docsDir)}`);
 }
 
 main().catch((err) => {

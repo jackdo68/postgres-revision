@@ -27,6 +27,7 @@ export default defineConfig({
           items: [
             { label: 'Course Guide', slug: 'course-guide' },
             { label: 'Commands', slug: 'commands' },
+            { label: 'Data Types', slug: 'data-types' },
             { label: 'Repo & DB Setup', slug: 'setup' },
           ],
         },
