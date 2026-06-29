@@ -19,6 +19,10 @@ The one idea to walk away with: **the skill isn't memorising index types — it'
 
 A table with no useful index does a Seq Scan on every query that filters it.
 
+### Unique vs non-unique — uniqueness is optional
+
+An index does **not** require unique values per row. By default an index happily stores duplicates (`CREATE INDEX idx_film_language ON film (language_id)` — hundreds of films share each `language_id`). Uniqueness is an *extra* property you opt into with `CREATE UNIQUE INDEX` or a `UNIQUE` constraint. A **primary key** is the strict case: unique **and** not-null, used as row identity. So unlike a primary key, a plain index can have repeated values — indexing is about *speed*, uniqueness is about *correctness*.
+
 ### Selectivity
 
 How much a condition narrows the results. `WHERE return_date IS NULL` (a few percent of rentals) is **highly selective** — perfect for an index. `WHERE active = true` when 99% of rows are active is **not** selective — Postgres may ignore the index and scan anyway.
