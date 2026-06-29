@@ -2,6 +2,8 @@
 
 A 6-week practice course using the **Pagila** database (DVD rental schema). Every exercise runs against real tables with real data. The goal: build schema design instincts for production systems and interviews.
 
+> **About Pagila:** Pagila is a well-known open-source PostgreSQL sample database — a port of MySQL's Sakila — modelling a DVD rental store. We use it because it has realistic, interconnected tables (films, actors, customers, rentals, payments) plus production-grade features like partitioning, full-text search, and triggers. Source: [github.com/xzilla/pagila](https://github.com/xzilla/pagila).
+
 ## Prerequisites
 
 ```bash
