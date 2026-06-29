@@ -31,18 +31,34 @@ Some changes force Postgres to rewrite **every row** on disk. On a small table t
 
 ### What locks a table (and what doesn't)
 
-**Safe — instant or very brief lock:**
-- `ADD COLUMN` with no default → just updates the catalog
-- `ADD COLUMN ... DEFAULT x` → instant on **Postgres 11+** (the default is stored in the catalog, rows aren't rewritten)
-- `DROP COLUMN` → instant (marks the column invisible; space reclaimed later by vacuum)
-- `CREATE INDEX CONCURRENTLY` → builds without blocking writes
+First, untangle two words people use loosely:
 
-**Dangerous — `ACCESS EXCLUSIVE` lock and/or full rewrite/scan:**
+- **Fast** = how *long* the lock is held. A catalog-only change grabs `ACCESS EXCLUSIVE` for microseconds; a row rewrite holds it for minutes. "Fast" is about duration, not about avoiding the lock.
+- **Safe** = won't corrupt data or break things. Two layers: **data-safe** (locks protect any in-flight query — Postgres never pulls a column out from under a running `SELECT`; the `ALTER` waits its turn) and **deploy-safe** (your *application* won't error after the change commits).
+
+These don't always agree. `DROP COLUMN` is fast and data-safe, but **not** deploy-safe until your app stops referencing the column.
+
+**Fast — brief `ACCESS EXCLUSIVE` lock (catalog only, no row rewrite):**
+- `ADD COLUMN` with no default → just updates the catalog
+- `ADD COLUMN ... DEFAULT x` → fast on **Postgres 11+** (the default is stored in the catalog, rows aren't rewritten)
+- `DROP COLUMN` → fast (sets `attisdropped` in `pg_attribute`; data bytes stay on disk, reclaimed later by vacuum)
+- `CREATE INDEX CONCURRENTLY` → builds without blocking writes (no `ACCESS EXCLUSIVE` at all)
+
+These still take the strongest lock — it's just held for an instant. They're *data-safe*: a concurrent query holds `ACCESS SHARE`, so the `ALTER` blocks until that query finishes rather than disrupting it.
+
+**Dangerous — `ACCESS EXCLUSIVE` lock held long (full rewrite/scan):**
 - `ALTER COLUMN ... TYPE` → rewrites every row
 - `ADD COLUMN ... DEFAULT x` on **Postgres ≤ 10** → rewrites every row
 - `CREATE INDEX` *without* `CONCURRENTLY` → blocks all writes until done
 - `ADD CONSTRAINT ... NOT NULL` / check constraints → full table scan to verify existing rows
-- `RENAME COLUMN` → brief lock, but instantly breaks any app still reading the old name
+- `RENAME COLUMN` → fast lock, but instantly breaks any app still reading the old name (not deploy-safe)
+
+### Two gotchas even for the "fast" operations
+
+A brief lock assumes the `ALTER` can *acquire* it quickly, and that the app survives the change:
+
+1. **Lock-queue pile-up.** If a long-running query already holds `ACCESS SHARE`, your fast `ALTER` waits behind it for `ACCESS EXCLUSIVE` — and *every new query then queues behind the waiting `ALTER`*. A microsecond operation can still stall all traffic. Mitigation: set a low `lock_timeout` so the migration backs off and retries instead of blocking the table.
+2. **App still using the column.** The database stays consistent, but old code running `SELECT dropped_col` errors the instant the migration commits. Convention: stop referencing the column in code → deploy → *then* drop it (see Expand / Contract below).
 
 ### The Expand / Contract pattern
 
